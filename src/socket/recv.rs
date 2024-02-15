@@ -100,18 +100,29 @@ impl RecvHandler {
     async fn start<P: ProtocolIdentity>(&mut self, filter_enabled: bool) {
         // Interval to prune to rate limiter.
         let mut interval = tokio::time::interval(Duration::from_secs(30));
-        let mut first_buffer = [0; MAX_PACKET_SIZE];
-        let mut second_buffer = [0; MAX_PACKET_SIZE];
+        let mut second_buffer = vec![0; MAX_PACKET_SIZE];
         use futures::future::OptionFuture;
         // We want to completely deactivate this branch of the select when there is no second
         // socket to receive from.
         let check_second_recv = self.second_recv.is_some();
+        let (socket_reader_tx, mut socket_reader_rx) = mpsc::unbounded_channel();
+        let recv = self.recv.clone();
+        tokio::spawn(async move {
+            loop {
+                let mut buf = vec![0; MAX_PACKET_SIZE];
+                tokio::select! {
+                    Ok((n, src)) = recv.recv_from(buf.as_mut()) => {
+                        socket_reader_tx.send((n, src, buf)).expect("Wasn't able to send on socket_reader_tx unbounded channel");
+                    }
+                }
+            }
+        });
 
         loop {
             tokio::select! {
-                Ok((length, src)) = self.recv.recv_from(&mut first_buffer) => {
+                Some((length, src, buf)) = socket_reader_rx.recv() => {
                     METRICS.add_recv_bytes(length);
-                    self.handle_inbound::<P>(src, length, &first_buffer).await;
+                    self.handle_inbound::<P>(src, length, &buf).await;
                 }
                 Some(Ok((length, src))) = Into::<OptionFuture<_>>::into(self.second_recv.as_ref().map(|second_recv|second_recv.recv_from(&mut second_buffer))), if check_second_recv => {
                     METRICS.add_recv_bytes(length);
@@ -134,7 +145,7 @@ impl RecvHandler {
         &mut self,
         mut src_address: SocketAddr,
         length: usize,
-        recv_buffer: &[u8; MAX_PACKET_SIZE],
+        recv_buffer: &Vec<u8>,
     ) {
         // Zero out the flowinfo and scope id of v6 socket addresses.
         //
