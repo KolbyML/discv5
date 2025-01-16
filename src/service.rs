@@ -219,6 +219,7 @@ pub struct Service {
 }
 
 /// Active RPC request awaiting a response from the handler.
+#[derive(Debug)]
 struct ActiveRequest {
     /// The address the request was sent to.
     pub contact: NodeContact,
@@ -241,6 +242,7 @@ pub struct Pong {
 }
 
 /// The kinds of responses we can send back to the discv5 layer.
+#[derive(Debug)]
 pub enum CallbackResponse {
     /// A response to a requested Nodes.
     Nodes(oneshot::Sender<Result<Vec<Enr>, RequestError>>),
@@ -1415,6 +1417,10 @@ impl Service {
     fn rpc_failure(&mut self, id: RequestId, error: RequestError) {
         trace!("RPC Error removing request. Reason: {:?}, id {}", error, id);
         if let Some(active_request) = self.active_requests.remove(&id) {
+            warn!(
+                "RPC Request failed: id: {}, error {:?}, active_request {:?}",
+                id, error, active_request
+            );
             // If this is initiated by the user, return an error on the callback. All callbacks
             // support a request error.
             match active_request.callback {
