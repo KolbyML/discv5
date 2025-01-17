@@ -638,6 +638,31 @@ mod tests {
     }
 
     #[test]
+    fn ref_test_encode_request_talkrequeset() {
+        // reference input
+        let id = RequestId(vec![113, 236, 255, 66, 31, 191, 221, 86]);
+        let message = Message::Request(Request {
+            id,
+            body: RequestBody::Talk {
+                protocol: vec![117, 116, 112],
+                request: vec![
+                    1, 0, 160, 40, 131, 158, 21, 73, 0, 0, 3, 239, 0, 16, 0, 0, 118, 25, 221, 231,
+                ],
+            },
+        });
+
+        // expected hex output
+        let expected_output = vec![
+            5, 226, 136, 113, 236, 255, 66, 31, 191, 221, 86, 131, 117, 116, 112, 148, 1, 0, 160,
+            40, 131, 158, 21, 73, 0, 0, 3, 239, 0, 16, 0, 0, 118, 25, 221, 231,
+        ];
+        dbg!(hex::encode(message.clone().encode()));
+        dbg!(message.clone().encode());
+
+        assert_eq!(hex::encode(message.encode()), hex::encode(expected_output));
+    }
+
+    #[test]
     fn encode_decode_ping_request() {
         let id = RequestId(vec![1]);
         let request = Message::Request(Request {
