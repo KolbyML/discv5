@@ -896,7 +896,7 @@ impl Handler {
                     self.active_challenges.insert(node_address, challenge);
                 }
                 Err(e) => {
-                    warn!(
+                    error!(
                         error = ?e,
                         "eee Invalid Authentication header. Dropping session",
                     );
