@@ -657,9 +657,9 @@ impl Handler {
         // already sent a WHOAREYOU ourselves, we drop sessions who send us a WHOAREYOU in
         // response.
         if request_call.handshake_sent() {
-            warn!(
+            error!(
                 node = %request_call.contact(),
-                "Authentication response already sent. Dropping session.",
+                "eee Authentication response already sent. Dropping session.",
             );
             self.fail_request(request_call, RequestError::InvalidRemotePacket, true)
                 .await;
@@ -686,7 +686,7 @@ impl Handler {
         ) {
             Ok(v) => v,
             Err(e) => {
-                error!(error = ?e, "Could not generate a session");
+                error!(error = ?e, "eee Could not generate a session");
                 self.fail_request(request_call, RequestError::InvalidRemotePacket, true)
                     .await;
                 return;
@@ -898,7 +898,7 @@ impl Handler {
                 Err(e) => {
                     warn!(
                         error = ?e,
-                        "Invalid Authentication header. Dropping session",
+                        "eee Invalid Authentication header. Dropping session",
                     );
                     self.fail_session(&node_address, RequestError::InvalidRemotePacket, true)
                         .await;
@@ -1036,9 +1036,9 @@ impl Handler {
                     // Random packet and we should reply with a WHOAREYOU.
                     // This means we need to drop the current session and re-establish.
                     trace!(error = %e, "Decryption failed");
-                    debug!(
+                    error!(error = %e,
                         %node_address,
-                        "Message from node is not encrypted with known session keys.",
+                        "eee Message from node is not encrypted with known session keys.",
                     );
                     self.fail_session(&node_address, RequestError::InvalidRemotePacket, true)
                         .await;
