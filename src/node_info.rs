@@ -26,6 +26,14 @@ pub struct NonContactable {
 }
 
 impl NodeContact {
+    pub fn new(public_key: CombinedPublicKey, socket_addr: SocketAddr, enr: Option<Enr>) -> Self {
+        NodeContact {
+            public_key,
+            socket_addr,
+            enr,
+        }
+    }
+
     pub fn node_id(&self) -> NodeId {
         match self.enr {
             Some(ref enr) => enr.node_id(),
