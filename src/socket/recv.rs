@@ -76,7 +76,7 @@ impl RecvHandler {
         let filter_enabled = filter_config.enabled;
 
         // create the channel to send decoded packets to the handler
-        let (handler, handler_recv) = mpsc::channel(30);
+        let (handler, handler_recv) = mpsc::channel(5000);
 
         let mut recv_handler = RecvHandler {
             recv,

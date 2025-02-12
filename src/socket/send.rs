@@ -41,7 +41,7 @@ impl SendHandler {
         send_ipv6: Option<Arc<UdpSocket>>,
     ) -> (mpsc::Sender<OutboundPacket>, oneshot::Sender<()>) {
         let (exit_send, exit) = oneshot::channel();
-        let (handler_send, handler_recv) = mpsc::channel(30);
+        let (handler_send, handler_recv) = mpsc::channel(5000);
 
         let mut send_handler = SendHandler {
             send_ipv4,
