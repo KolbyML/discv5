@@ -76,7 +76,7 @@ impl RecvHandler {
         let filter_enabled = filter_config.enabled;
 
         // create the channel to send decoded packets to the handler
-        let (handler, handler_recv) = mpsc::channel(5000);
+        let (handler, handler_recv) = mpsc::channel(30);
 
         let mut recv_handler = RecvHandler {
             recv,
@@ -110,11 +110,11 @@ impl RecvHandler {
         loop {
             tokio::select! {
                 Ok((length, src)) = self.recv.recv_from(&mut first_buffer) => {
-                    METRICS.add_recv_bytes(length);
+                    METRICS.add_recv_bytes(1);
                     self.handle_inbound::<P>(src, length, &first_buffer).await;
                 }
                 Some(Ok((length, src))) = Into::<OptionFuture<_>>::into(self.second_recv.as_ref().map(|second_recv|second_recv.recv_from(&mut second_buffer))), if check_second_recv => {
-                    METRICS.add_recv_bytes(length);
+                    METRICS.add_recv_bytes(1);
                     self.handle_inbound::<P>(src, length, &second_buffer).await;
                 }
                 _ = interval.tick(), if filter_enabled => {
