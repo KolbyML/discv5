@@ -968,30 +968,25 @@ impl Handler {
 
         let packets = if let Some(session) = self.sessions.get_mut(node_address) {
             let mut packets = vec![];
-            for request_call in self
-                .active_requests
-                .get(node_address)
-                .unwrap_or(&vec![])
-                .iter()
-                .filter(|req| {
-                    // Except the active request that was used to establish the new session, as it has
-                    // already been handled and shouldn't be replayed.
+
+            if let Some(request_calls) = self.active_requests.get(node_address) {
+                for (_, request_call) in request_calls.iter() {
                     if let Some(nonce) = message_nonce.as_ref() {
-                        req.packet().message_nonce() != nonce
-                    } else {
-                        true
+                        if request_call.packet().message_nonce() == nonce {
+                            continue;
+                        }
                     }
-                })
-            {
-                if let Ok(new_packet) =
-                    session.encrypt_message::<P>(self.node_id, &request_call.encode())
-                {
-                    packets.push((*request_call.packet().message_nonce(), new_packet));
-                } else {
-                    error!(
-                        id = ?request_call.id(),
-                        "Failed to re-encrypt packet while replaying active request with id",
-                    );
+
+                    if let Ok(new_packet) =
+                        session.encrypt_message::<P>(self.node_id, &request_call.encode())
+                    {
+                        packets.push((*request_call.packet().message_nonce(), new_packet));
+                    } else {
+                        error!(
+                            id = ?request_call.id(),
+                            "Failed to re-encrypt packet while replaying active request with id",
+                        );
+                    }
                 }
             }
 
@@ -1311,7 +1306,7 @@ impl Handler {
             }
         }
         // fail all active requests
-        for req in self
+        for (_, req) in self
             .active_requests
             .remove_requests(node_address)
             .unwrap_or_default()
@@ -1366,7 +1361,7 @@ impl Handler {
         }
 
         if let Some(requests) = self.active_requests.get(node_address) {
-            requests.iter().any(|req| req.initiating_session())
+            requests.iter().any(|(_, req)| req.initiating_session())
         } else {
             false
         }

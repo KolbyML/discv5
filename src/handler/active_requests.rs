@@ -5,7 +5,7 @@ use std::collections::hash_map::Entry;
 
 pub(super) struct ActiveRequests {
     /// A list of raw messages we are awaiting a response from the remote.
-    active_requests_mapping: HashMap<NodeAddress, Vec<RequestCall>>,
+    active_requests_mapping: HashMap<NodeAddress, HashMap<RequestId, RequestCall>>,
     // WHOAREYOU messages do not include the source node id. We therefore maintain another
     // mapping of active_requests via message_nonce. This allows us to match WHOAREYOU
     // requests with active requests sent.
@@ -27,7 +27,7 @@ impl ActiveRequests {
         self.active_requests_mapping
             .entry(node_address.clone())
             .or_default()
-            .push(request_call);
+            .insert(request_call.id().into(), request_call);
         self.active_requests_nonce_mapping
             .insert(nonce, node_address);
     }
@@ -51,9 +51,9 @@ impl ActiveRequests {
                 let maybe_request_call = requests
                     .get_mut()
                     .iter_mut()
-                    .find(|req| req.packet().message_nonce() == &old_nonce);
+                    .find(|(_, req)| req.packet().message_nonce() == &old_nonce);
 
-                if let Some(request_call) = maybe_request_call {
+                if let Some((_, request_call)) = maybe_request_call {
                     request_call.update_packet(new_packet);
                 } else {
                     debug_unreachable!("expected to find request call in active_requests_mapping");
@@ -67,7 +67,7 @@ impl ActiveRequests {
         }
     }
 
-    pub fn get(&self, node_address: &NodeAddress) -> Option<&Vec<RequestCall>> {
+    pub fn get(&self, node_address: &NodeAddress) -> Option<&HashMap<RequestId, RequestCall>> {
         self.active_requests_mapping.get(node_address)
     }
 
@@ -81,28 +81,43 @@ impl ActiveRequests {
                 None
             }
             Entry::Occupied(mut requests) => {
-                let result = requests
+                match requests
                     .get()
                     .iter()
-                    .position(|req| req.packet().message_nonce() == nonce)
-                    .map(|index| (node_address, requests.get_mut().remove(index)));
-                if requests.get().is_empty() {
-                    requests.remove();
+                    .find(|(_, req)| req.packet().message_nonce() == nonce)
+                    .map(|(key, _)| key.clone())
+                {
+                    Some(key) => {
+                        let result = (
+                            node_address,
+                            requests
+                                .get_mut()
+                                .remove(&key)
+                                .expect("If key exists, it should be removed"),
+                        );
+                        if requests.get().is_empty() {
+                            requests.remove();
+                        }
+                        Some(result)
+                    }
+                    None => None,
                 }
-                result
             }
         }
     }
 
     /// Remove all requests associated with a node.
-    pub fn remove_requests(&mut self, node_address: &NodeAddress) -> Option<Vec<RequestCall>> {
+    pub fn remove_requests(
+        &mut self,
+        node_address: &NodeAddress,
+    ) -> Option<HashMap<RequestId, RequestCall>> {
         let requests = self.active_requests_mapping.remove(node_address)?;
         // Account for node addresses in `active_requests_nonce_mapping` with an empty list
         if requests.is_empty() {
             debug_unreachable!("expected to find requests in active_requests_mapping");
             return None;
         }
-        for req in &requests {
+        for (_, req) in &requests {
             if self
                 .active_requests_nonce_mapping
                 .remove(req.packet().message_nonce())
@@ -124,18 +139,17 @@ impl ActiveRequests {
         match self.active_requests_mapping.entry(node_address.clone()) {
             Entry::Vacant(_) => None,
             Entry::Occupied(mut requests) => {
-                let index = requests.get().iter().position(|req| {
-                    let req_id: RequestId = req.id().into();
-                    &req_id == id
-                })?;
-                let request_call = requests.get_mut().remove(index);
-                if requests.get().is_empty() {
-                    requests.remove();
+                if let Some(request_call) = requests.get_mut().remove(id) {
+                    if requests.get().is_empty() {
+                        requests.remove();
+                    }
+                    // Remove the associated nonce mapping.
+                    self.active_requests_nonce_mapping
+                        .remove(request_call.packet().message_nonce());
+                    Some(request_call)
+                } else {
+                    None
                 }
-                // Remove the associated nonce mapping.
-                self.active_requests_nonce_mapping
-                    .remove(request_call.packet().message_nonce());
-                Some(request_call)
             }
         }
     }
@@ -155,7 +169,7 @@ impl ActiveRequests {
         }
 
         for (address, requests) in self.active_requests_mapping.iter() {
-            for req in requests {
+            for (_, req) in requests {
                 let nonce = req.packet().message_nonce();
                 if !self.active_requests_nonce_mapping.contains_key(nonce) {
                     panic!("Address {} maps to request with nonce {:?}, which does not exist in `active_requests_nonce_mapping`", address, nonce);
@@ -173,13 +187,18 @@ impl Stream for ActiveRequests {
                 match self.active_requests_mapping.entry(node_address.clone()) {
                     Entry::Vacant(_) => Poll::Ready(None),
                     Entry::Occupied(mut requests) => {
-                        match requests
+                        let key = requests
                             .get()
                             .iter()
-                            .position(|req| req.packet().message_nonce() == &nonce)
-                        {
-                            Some(index) => {
-                                let result = (node_address, requests.get_mut().remove(index));
+                            .find(|(_, req)| req.packet().message_nonce() == &nonce)
+                            .map(|(key, _)| key.clone());
+                        match key {
+                            Some(key) => {
+                                let request_call = requests
+                                    .get_mut()
+                                    .remove(&key)
+                                    .expect("If key exists, it should be removed");
+                                let result = (node_address, request_call);
                                 if requests.get().is_empty() {
                                     requests.remove();
                                 }
