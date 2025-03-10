@@ -12,6 +12,10 @@ pub struct InternalMetrics {
     pub moving_window: u64,
     /// The number of unsolicited requests received per moving window.
     pub unsolicited_requests_per_window: AtomicUsize,
+    /// The number of packets sent.
+    pub packets_sent: AtomicUsize,
+    /// The number of packets received.
+    pub packets_recv: AtomicUsize,
     /// The number of bytes sent.
     pub bytes_sent: AtomicUsize,
     /// The number of bytes received.
@@ -28,6 +32,8 @@ impl Default for InternalMetrics {
             moving_window: 5,
             active_sessions: AtomicUsize::new(0),
             unsolicited_requests_per_window: AtomicUsize::new(0),
+            packets_sent: AtomicUsize::new(0),
+            packets_recv: AtomicUsize::new(0),
             bytes_sent: AtomicUsize::new(0),
             bytes_recv: AtomicUsize::new(0),
             ipv4_contactable: AtomicBool::new(false),
@@ -41,12 +47,18 @@ impl InternalMetrics {
         let current_bytes_recv = self.bytes_recv.load(Ordering::Relaxed);
         self.bytes_recv
             .store(current_bytes_recv.saturating_add(bytes), Ordering::Relaxed);
+        let current_packets_recv = self.packets_recv.load(Ordering::Relaxed);
+        self.packets_recv
+            .store(current_packets_recv.saturating_add(1), Ordering::Relaxed);
     }
 
     pub fn add_sent_bytes(&self, bytes: usize) {
         let current_bytes_sent = self.bytes_sent.load(Ordering::Relaxed);
         self.bytes_sent
             .store(current_bytes_sent.saturating_add(bytes), Ordering::Relaxed);
+        let current_packets_sent = self.packets_sent.load(Ordering::Relaxed);
+        self.packets_sent
+            .store(current_packets_sent.saturating_add(1), Ordering::Relaxed);
     }
 }
 
@@ -57,6 +69,10 @@ pub struct Metrics {
     pub active_sessions: usize,
     /// The number of unsolicited requests received per second (averaged over a moving window).
     pub unsolicited_requests_per_second: f64,
+    /// The number of packets sent.
+    pub packets_sent: usize,
+    /// The number of packets received.
+    pub packets_recv: usize,
     /// The number of bytes sent.
     pub bytes_sent: usize,
     /// The number of bytes received.
@@ -75,6 +91,8 @@ impl From<&METRICS> for Metrics {
                 .unsolicited_requests_per_window
                 .load(Ordering::Relaxed) as f64
                 / internal_metrics.moving_window as f64,
+            packets_sent: internal_metrics.packets_sent.load(Ordering::Relaxed),
+            packets_recv: internal_metrics.packets_recv.load(Ordering::Relaxed),
             bytes_sent: internal_metrics.bytes_sent.load(Ordering::Relaxed),
             bytes_recv: internal_metrics.bytes_recv.load(Ordering::Relaxed),
             ipv4_contactable: internal_metrics.ipv4_contactable.load(Ordering::Relaxed),
