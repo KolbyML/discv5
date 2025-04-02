@@ -267,10 +267,6 @@ impl<P: ProtocolIdentity> Discv5<P> {
         nodes_to_send
     }
 
-    pub fn ip_mode(&self) -> IpMode {
-        self.ip_mode
-    }
-
     /// Mark a node in the routing table as `Disconnected`.
     ///
     /// A `Disconnected` node will be present in the routing table and will be only
@@ -572,10 +568,10 @@ impl<P: ProtocolIdentity> Discv5<P> {
         }
     }
 
-    /// Request a TALK message from a node, identified via the NodeContact.
+    /// Request a TALK message from a node, identified via the ENR.
     pub fn talk_req(
         &self,
-        node_contact: NodeContact,
+        enr: Enr,
         protocol: Vec<u8>,
         request: Vec<u8>,
     ) -> impl Future<Output = Result<Vec<u8>, RequestError>> + 'static {
@@ -583,8 +579,10 @@ impl<P: ProtocolIdentity> Discv5<P> {
 
         let (callback_send, callback_recv) = oneshot::channel();
         let channel = self.clone_channel();
+        let ip_mode = self.ip_mode;
 
         async move {
+            let node_contact = NodeContact::try_from_enr(enr, ip_mode)?;
             let channel = channel.map_err(|_| RequestError::ServiceNotStarted)?;
 
             let event = ServiceRequest::Talk(node_contact, protocol, request, callback_send);
